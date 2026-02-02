@@ -1,40 +1,31 @@
 from langchain.agents import create_agent
-from langchain.tools import tool
-from tavily import TavilyClient
-from dotenv import load_dotenv
-from typing import Any, Dict
-from langgraph.checkpoint.memory import InMemorySaver  
-import os
+from langgraph.checkpoint.memory import InMemorySaver
 
 from src.app.core.llm import get_llm
+from src.app.mcp.client import mcp_client
+from src.app.mcp.langchain_adapter import to_langchain_tool
 
-load_dotenv();
-
-tav_client = TavilyClient(os.getenv("TAVILY_API_KEY"));
-
-@tool
-def search_the_web(query:str) -> Dict[str, Any]:
-    """Search the web for information"""
-    return tav_client.search(query=query)
 
 system_prompt = """
+You are a personal chef.
 
-You are a personal chef. The user will give you a list of ingredients they have left over in their house.
+The user gives ingredients they have.
 
-Using the web search tool, search the web for recipes that can be made with the ingredients they have.
-
-Return recipe suggestions and eventually the recipe instructions to the user, if requested.
-
+Use available tools to search for recipes and cooking advice.
 """
 
+
 def chef_agent():
-    llm= get_llm("gemini-2.5-flash")
-    chef = create_agent(
+    llm = get_llm("gemini-2.5-flash")
+
+    tools = [
+        to_langchain_tool(tool)
+        for tool in mcp_client.list_tools().values()
+    ]
+
+    return create_agent(
         model=llm,
-        tools= [search_the_web],
+        tools=tools,
         system_prompt=system_prompt,
-        checkpointer=InMemorySaver()
+        checkpointer=InMemorySaver(),
     )
-    return chef
-
-
